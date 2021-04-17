@@ -1,19 +1,20 @@
 function New-GCPSession {
     param (
         [string]$OrganizationId,
+        [string]$HostProjectId,
         [switch]$NoPrompt = $false
     )
 
 
     
-#     # Set-Variable -Name Folders -Value (New-FolderLookup -OrganizationId $selectedOrg) -Scope Global
-#     # Set-Variable -Name Projects -Value (New-ProjectLookup -OrganizationId $selectedOrg) -Scope Global
-    # Set-Variable -Name XpnID -value (Get-HostProjects -OrganizationId $selectedOrg) -Scope Global
-    # Set-Variable -Name OrgId -Value $selectedOrg -Scope Global
-    $OrgId, $DefaultDomainName = Select-Organization $OrganizationId
+    # Set-Variable -Name Folders -Value (New-FolderLookup -OrganizationId $selectedOrg) -Scope Global
+    # Set-Variable -Name Projects -Value (New-ProjectLookup -OrganizationId $selectedOrg) -Scope Global
+    #Set-Variable -Name OrgId -Value $selectedOrg -Scope Global
+    $OrgId, $DefaultDomainName = Select-Organization -OrganizationId $OrganizationId
+    $XpnID = Select-HostProject -HostProjectId $HostProjectId
     Set-Variable -Name OrgId -Value $OrgId -Scope Global
     Set-Variable -Name DefaultDomainName -Value $DefaultDomainName -Scope Global
-
+    Set-Variable -Name XpnID -value $XpnID -Scope Global
 }
 
 function Select-Organization {
@@ -30,19 +31,12 @@ function Select-Organization {
         $selectedOrg = ""
         $domainName = ""
     }
-
-    $orgLookup = @{}
-    $counter = 1
-    foreach ($org in $orgs) {        
-        $orglookup.Add($org.displayName, $counter)
-        $counter ++
-    }
     
     while ($True) {
         Write-Host -ForegroundColor Green "[+] Select a organization: `n"
-        for ($i = 1 ; $i -lt $orgs.Count + 1; $i++) {
+        for ($i = 0 ; $i -lt $orgs.Count; $i++) {
             Write-Host -ForegroundColor Green "[$i] " -NoNewline
-            Write-Host "$($orgs[$i -1].displayName)"
+            Write-Host "$($orgs[$i].displayName) [$($orgs[$i].name.Split("/")[1])]"
         }
         Write-Host -ForegroundColor Green "`n[Q]" -NoNewline
         write-Host " to Quit"
@@ -51,13 +45,9 @@ function Select-Organization {
         if ($selection -eq "q") {
             Clear-Host
             Write-Error -Message "Error: User decided to exit prompt" -Category CloseError -ErrorAction Stop
-        }
-        try {
-            $orgLookup.ContainsKey($orgs[$selection - 1].displayName)
-        }
-        catch {
+        } elseif ($orgs.Count -le $selection ) {
             Clear-Host
-            Write-Host -ForegroundColor Red "`nProvide a proper selection"
+            Write-Host -ForegroundColor Red "`nProvide a proper selection, [$selection] is not within range 0 - $($orgs.Count-1)"
             Start-Sleep 3
             Clear-Host
             continue
@@ -67,12 +57,12 @@ function Select-Organization {
             Clear-Host
             $confirm = @"
 Confirm selection y/n or q to Quit
-    Selected org: $($orgs[$selection - 1].displayName)
+    Selected org: $($orgs[$selection].displayName)
 "@
             $confirm = Read-Host -Prompt $confirm
             if ($confirm -eq "y") {
-                $selectedOrg = $orgs[$selection - 1].name.Split("/")[1]
-                $domainName = $orgs[$selection - 1].displayName
+                $selectedOrg = $orgs[$selection].name.Split("/")[1]
+                $domainName = $orgs[$selection].displayName
                 break
             }
             elseif ($confirm -eq "n") {
@@ -88,55 +78,72 @@ Confirm selection y/n or q to Quit
             Clear-Host
             continue
         }
-        break
+        if ($selectedOrg) {break}
     }
     return  $selectedOrg, $domainName
 }
 
 function Select-HostProject {
-    $counter = 1
-    foreach ($org in $orgs) {
-        $orglookup.Add($org.displayName, $counter)
-        $counter ++ 
+    param (
+        [string]$HostProjectId
+    )
+    $xpns = Get-HostProjects 
+    $xpn = $xpns | Where-Object{$_.name -eq $HostProjectId}
+
+    if ($xpn) {
+        $selectedXPN = $xpn.name
+    } else {
+        $selectedXPN = ""
     }
-    $selectedOrg = ""
-    $domainName = ""
-    while ($true) {
-        Write-Host -ForegroundColor Green "[+] Select a organization: `n"
-        for ($i = 1 ; $i -lt $orgs.Count + 1; $i++) {
+
+    while ($True) {
+        Write-Host -ForegroundColor Green "[+] Select a Host Project: `n"
+        for ($i = 0 ; $i -lt $xpns.Count; $i++) {
             Write-Host -ForegroundColor Green "[$i] " -NoNewline
-            Write-Host "$($orgs[$i -1].displayName)"
+            Write-Host "$($xpns[$i].name)"
         }
+        Write-Host -ForegroundColor Green "`n[Q]" -NoNewline
+        write-Host " to Quit"
         Write-Host
         $selection = Read-Host
-        try {
-            $orglookup.ContainsKey($orgs[$selection - 1].displayName)
-        }
-        catch {
+        if ($selection -eq "q") {
             Clear-Host
-            Write-Host -ForegroundColor Red "`nProvide a proper selection"
+            Write-Error -Message "Error: User decided to exit prompt" -Category CloseError -ErrorAction Stop
+        } elseif ($orgs.Count -le $selection ) {
+            Clear-Host
+            Write-Host -ForegroundColor Red "`nProvide a proper selection, [$selection] is not within range 0 - $($orgs.Count-1)"
             Start-Sleep 3
             Clear-Host
             continue
         }
-        
-        Clear-Host
-        $confirm = @"
-        Confirm selection y/n
-Selected org: $($orgs[$selection - 1].displayName)
+
+        while ($true) {
+            Clear-Host
+            $confirm = @"
+Confirm selection y/n or q to Quit
+    Selected Host Project: $($xpns[$selection].name)
 "@
-        $confirm = Read-Host -Prompt $confirm
-        if ($confirm -eq "y") {
-            $selectedOrg = $orgs[$selection - 1].name.Split("/")[1]
-            $domainName = $orgs[$selection - 1].displayName
-            break
-        }
-        if ($confirm -eq "n") {
+            $confirm = Read-Host -Prompt $confirm
+            if ($confirm -eq "y") {
+                $selectedXPN = $xpns[$selection].name
+                break
+            }
+            elseif ($confirm -eq "n") {
+            Clear-Host
+                break
+            }
+            elseif ($confirm -eq "q") {
+                Write-Error -Message "Error: User decided to exit prompt" -Category CloseError -ErrorAction Stop
+            }
+            Clear-Host
+            Write-Host -ForegroundColor Red "`nIncorrect key [$confirm] pressed, Please confirm selection with y or n."
+            Start-Sleep 3
             Clear-Host
             continue
         }
-        Clear-Host
+        if ($selectedXPN) {break}        
     }
+    return $selectedXPN
 }
 
 function Get-Organizations {
@@ -174,12 +181,23 @@ function Get-HostProjects {
     $hostProjects
 }
 
+function Get-HttpProxys {
+
+}
+
+function Get-HttpsProxys {
+
+}
+
+function Get-ForwardingRules {
+
+}
+
 # Exported Functions
 $Exports = @(
     "New-GCPSession"
     ,"Get-Organizations"
     ,"Get-HostProjects"
-    # "Get-HostProjects"
 )
 
 Export-ModuleMember -Function $Exports
