@@ -112,11 +112,6 @@ function New-GCPSession {
         [string]$HostProjectId
     )
 
-
-    
-    # Set-Variable -Name Folders -Value (New-FolderLookup -OrganizationId $selectedOrg) -Scope Global
-    # Set-Variable -Name Projects -Value (New-ProjectLookup -OrganizationId $selectedOrg) -Scope Global
-    #Set-Variable -Name OrgId -Value $selectedOrg -Scope Global
     $OrgId, $DefaultDomainName = Select-Organization -OrganizationId $OrganizationId
     Set-Variable -Name OrgId -Value $OrgId -Scope Global
     Set-Variable -Name DefaultDomainName -Value $DefaultDomainName -Scope Global
