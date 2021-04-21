@@ -234,28 +234,53 @@ function Get-Subnets {
 
 function Get-Networks {
     param (
-        [string]$HostProjectId  = $Global:XpnId
+        [string]$HostProjectId = $Global:XpnId
     )
     $networks = @(gcloud compute networks list --project=$HostProjectId --format=json | ConvertFrom-Json)
     $networks
 }
 
 function Show-SubnetUtilization {
-    $_subnetUtilization = Get-SubnetUtilization
-        
-    foreach ($network in $_subnetUtilization.keys) {
-        Write-Host -ForegroundColor Green "VPC Network: "  -NoNewline
-        Write-Host $network
-        foreach ($subnet in $_subnetUtilization[$network].subnets) {
-            Write-Host -ForegroundColor Red "`tSubnetwork: "  -NoNewline
-            Write-Host "$($subnet.name) - $($subnet.ipCidrRange) [$($subnet.ShowUtilization().percentUsed)]"
+    param (
+        [switch]$AllHostProjects = $false,
+        [string]$HostProjectId = $Global:XpnId
+    )
+
+    if ($AllHostProjects) {
+        $_hostProjects = Get-HostProjects
+    } else {
+        $_hostProjects = @([PSCustomObject]@{kind='compute#project'; name=$HostProjectId })
+    }
+    foreach ($_hostProject in $_hostProjects) {
+        $_subnetUtilization = Get-SubnetUtilization -HostProjectId $_hostProject.name
+        Write-Host -ForegroundColor Green "Host Project: "  -NoNewline
+        Write-Host $_hostProject.name
+        foreach ($network in $_subnetUtilization.keys) {
+            Write-Host -ForegroundColor Green "`tVPC Network: "  -NoNewline
+            Write-Host $network
+            foreach ($subnet in $_subnetUtilization[$network].subnets) {
+                $_utilization = $subnet.ShowUtilization()
+                Write-Host -ForegroundColor Green "`t`tSubnetwork: "  -NoNewline
+                Write-Host $subnet.name
+                Write-Host -ForegroundColor Green "`t`t`tRegion: "  -NoNewline
+                Write-Host $subnet.region
+                Write-Host -ForegroundColor Green "`t`t`tipCidrRange: "  -NoNewline
+                Write-Host $subnet.ipCidrRange
+                Write-Host -ForegroundColor Green "`t`t`tUtilization: "  -NoNewline
+                Write-Host "$($_utilization.usedHosts) / $($_utilization.maxHosts ) [$($_utilization.percentUsed)]"
+            }
         }
     }
 }
+
 function Get-SubnetUtilization {
-    $_subnets = Get-Subnets
-    $_networks = Get-networks
-    $_serviceProjects = Get-ServiceProjects
+    param (
+        [string]$HostProjectId = $Global:XpnId
+    )
+
+    $_subnets = Get-Subnets -HostProjectId $HostProjectId
+    $_networks = Get-networks -HostProjectId $HostProjectId
+    $_serviceProjects = Get-ServiceProjects -HostProjectId $HostProjectId
     
     $networks = @{}
     foreach($_network in $_networks){
@@ -297,12 +322,22 @@ function Get-SubnetUtilization {
 
 function Get-Instances {
     param (
+        [string]$OrganizationId,
+        [string]$FolderId,
         [string]$ProjectId
     )
+    if ($OrganizationId) {
+        $_scope = "organizations/$OrganizationId"
+    } elseif ($FolderId) {
+        $_scope = "folders/$FolderId"        
+    } elseif ($ProjectId) {
+        $_scope = "projects/$ProjectId"
+    }
+
     $instances = @(
         gcloud asset search-all-resources `
         --asset-types='compute.googleapis.com/Instance' `
-        --scope="projects/$ProjectId" `
+        --scope=$_scope `
         --format=json | ConvertFrom-Json
     )
     $instances
